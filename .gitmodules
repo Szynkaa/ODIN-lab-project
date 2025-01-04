@@ -1,0 +1,3 @@
+[submodule "libs/af-uart"]
+	path = libs/af-uart
+	url = https://github.com/alexforencich/verilog-uart
