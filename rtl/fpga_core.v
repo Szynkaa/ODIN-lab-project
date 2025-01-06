@@ -1,5 +1,5 @@
 
-module fpga_core (
+module fpga_core #(parameter prescale=100_000_000 / (8 * 115_200)) (
     // General
     input  wire clk,
     input  wire rst,
@@ -43,7 +43,7 @@ module fpga_core (
         // output wire                   rx_frame_error,
 
         // Configuration
-        .prescale(100_000_000 / (8 * 115_200))
+        .prescale(prescale)
     );
     
     wire           CTRL_READBACK_EVENT = 0;
