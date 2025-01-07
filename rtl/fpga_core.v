@@ -1,5 +1,5 @@
 
-module fpga_core #(parameter prescale=100_000_000 / (8 * 115_200)) (
+module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200)) (
     // General
     input  wire clk,
     input  wire rst,
