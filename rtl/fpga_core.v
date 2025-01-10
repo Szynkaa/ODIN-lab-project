@@ -1,5 +1,6 @@
 
-module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200)) (
+module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200),
+                   parameter max_neurons = 255) (
     // General
     input  wire clk,
     input  wire rst,
@@ -55,7 +56,7 @@ module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200)) (
     wire       CFG_GATE_ACTIVITY;
     wire       CFG_OPEN_LOOP;
     wire       CFG_AER_SRC_CTRL_nNEUR;
-    wire [7:0] CFG_MAX_NEUR = 255;
+    wire [7:0] CFG_MAX_NEUR = max_neurons;
         
     wire [9:0] AERIN_ADDR;
     wire       AERIN_REQ;
