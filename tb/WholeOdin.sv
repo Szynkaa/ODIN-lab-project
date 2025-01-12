@@ -57,19 +57,13 @@ module WholeOdin();
     logic            SPI_param_checked;
     logic            SNN_initialized_rdy;
     
-//    logic            SCK, MOSI, MISO;
     logic            RX, TX;
-//    logic [  `M+1:0] AERIN_ADDR;
-//    logic [  `M-1:0] AEROUT_ADDR;
-//    logic            AERIN_REQ;//, AERIN_ACK;//, AEROUT_REQ;//, AEROUT_ACK;
     wire             SCHED_FULL;
     
     logic [    31:0] synapse_pattern , syn_data;
     logic [    31:0] neuron_pattern  , neur_data;
     logic [    31:0] shift_amt;
     logic [    15:0] addr_temp;
-    
-    logic [    19:0] spi_read_data;
 
     logic        [ 6:0] param_leak_str;
     logic signed [11:0] param_thr;
@@ -94,11 +88,6 @@ module WholeOdin();
 	***************************/ 
     
     initial begin
-//        SCK         =  1'b0;
-//        MOSI        =  1'b0;
-//        AERIN_ADDR  = 10'b0;
-//        AERIN_REQ   =  1'b0;
-//        AEROUT_ACK  =  1'b0;
         RX = 1'b1;
         TX = 1'b1;
         
@@ -179,108 +168,101 @@ module WholeOdin();
         $display("----- Ending verification of programmed SNN parameters, no error found!");
         
         SPI_param_checked = 1'b1;
-        // ________TODO____________
-//        while (~SNN_initialized_rdy) wait_ns(1);
+        
+        while (~SNN_initialized_rdy) wait_ns(1);
         
 
         
-//        /*****************************************************************************************************************************************************************************************************************
-//                                                                                                    PROGRAM NEURON MEMORY WITH TEST VALUES
-//        *****************************************************************************************************************************************************************************************************************/
+        /*****************************************************************************************************************************************************************************************************************
+                                                                                                    PROGRAM NEURON MEMORY WITH TEST VALUES
+        *****************************************************************************************************************************************************************************************************************/
 
-//        if (`PROGRAM_NEURON_MEMORY) begin
-//                $display("----- Starting programmation of neuron memory in the SNN through UART.");
-//            neuron_pattern = {2{8'b01010101,8'b10101010}};
-//            for (i=0; i<`N; i=i+1) begin
-//                for (j=0; j<4; j=j+1) begin
-//                    neur_data       = neuron_pattern >> (j<<3);
-//                    addr_temp[15:8] = j;
-//                    addr_temp[7:0]  = i;    // Each single neuron
-//                    uart_send_neuron(.byte_addr(addr_temp[10:8]),
-//                                     .word_addr(addr_temp[7:0]),
-//                                     .mask(8'h00),
-//                                     .data(neur_data[7:0]),
-//                                     .odin_rx(RX)
-//                                     );
-//                end
-//                if(!(i%10))
-//                    $display("programming neurons... (i=%0d/256)", i);
-//            end
-//            $display("----- Ending programmation of neuron memory in the SNN through UART.");
-//        end else
-//            $display("----- Skipping programmation of neuron memory in the SNN through UART.");
+        if (`PROGRAM_NEURON_MEMORY) begin
+                $display("----- Starting programmation of neuron memory in the SNN through UART.");
+            uart_send_configuration (.addr(2'd0), .data(1'b1), .odin_rx(RX)); // CFG_GATE_ACTIVITY
+            neuron_pattern = {2{8'b01010101,8'b10101010}};
+            for (i=0; i<`N; i=i+1) begin
+                for (j=0; j<4; j=j+1) begin
+                    neur_data       = neuron_pattern >> (j<<3);
+                    addr_temp[15:8] = j;
+                    addr_temp[7:0]  = i;    // Each single neuron
+                    uart_send_neuron(.byte_addr(addr_temp[9:8]),
+                                     .word_addr(addr_temp[7:0]),
+                                     .mask(8'h00),
+                                     .data(neur_data[7:0]),
+                                     .odin_rx(RX)
+                                     );
+                end
+                if(!(i%10))
+                    $display("programming neurons... (i=%0d/256)", i);
+            end
+            $display("----- Ending programmation of neuron memory in the SNN through UART.");
+            uart_send_configuration (.addr(2'd0), .data(1'b0), .odin_rx(RX)); // disable CFG_GATE_ACTIVITY
+        end else
+            $display("----- Skipping programmation of neuron memory in the SNN through UART.");
             
         
-//        /*****************************************************************************************************************************************************************************************************************
-//                                                                                                        READ BACK AND TEST NEURON MEMORY
-//        *****************************************************************************************************************************************************************************************************************/
+        /*****************************************************************************************************************************************************************************************************************
+                                                                                                        READ BACK AND TEST NEURON MEMORY
+        *****************************************************************************************************************************************************************************************************************/
         
-//        if (`VERIFY_NEURON_MEMORY) begin
-//            $display("----- Starting verification of neuron memory in the SNN through SPI.");
-//            for (i=0; i<`N; i=i+1) begin
-//                for (j=0; j<4; j=j+1) begin
-//                    neur_data       = neuron_pattern >> (j<<3);
-//                    addr_temp[15:8] = j;
-//                    addr_temp[7:0]  = i;    // Each single neuron
-                    
-//                    spi_read (.addr({1'b1,1'b0,2'b01,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
-//                    assert(spi_read_data == {12'b0,neur_data[7:0]}) else $fatal(0, "Byte %d of neuron %d not written/read correctly.", j, i);
-//                end
-//                if(!(i%10))
-//                    $display("verifying neurons... (i=%0d/256)", i);
-//            end
-//            $display("----- Ending verification of neuron memory in the SNN through SPI, no error found!");
-//        end else
-//            $display("----- Skipping verification of neuron memory in the SNN through SPI.");
+        if (`VERIFY_NEURON_MEMORY) begin
+            $display("----- Starting verification of neuron memory in the SNN through SPI.");
+            for (i=0; i<`N; i=i+1) begin
+                assert(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[i] == neuron_pattern) else $fatal(1, "Memory of neuron %d not written/read correctly.", i);
+
+                if(!(i%10))
+                    $display("verifying neurons... (i=%0d/256)", i);
+            end
+            $display("----- Ending verification of neuron memory in the SNN through SPI, no error found!");
+        end else
+            $display("----- Skipping verification of neuron memory in the SNN through SPI.");
         
         
-//        /*****************************************************************************************************************************************************************************************************************
-//                                                                                                    PROGRAM SYNAPSE MEMORY WITH TEST VALUES
-//        *****************************************************************************************************************************************************************************************************************/
+        /*****************************************************************************************************************************************************************************************************************
+                                                                                                    PROGRAM SYNAPSE MEMORY WITH TEST VALUES
+        *****************************************************************************************************************************************************************************************************************/
         
-//        if (`PROGRAM_ALL_SYNAPSES) begin
-//            synapse_pattern = {4'd15,4'd7,4'd12,4'd13,4'd10,4'd5,4'd1,4'd2};
-//            $display("----- Starting programmation of all synapses in the SNN through UART.");
-//            for (i=0; i<8192; i=i+1) begin
-//                for (j=0; j<4; j=j+1) begin
-//                    syn_data        = synapse_pattern >> (j<<3);
-//                    addr_temp[15:13] = j;    // Each single byte in a 32-bit word
-//                    addr_temp[12:0 ] = i;    // Programmed address by address
-//                    uart_send_synapse (.byte_addr(addr_temp[14:13]),
-//                                       .word_addr(addr_temp[11:0]),
-//                                       .mask(8'h00),
-//                                       .data(syn_data[7:0]),
-//                                       .odin_rx(RX)
-//                                       );
-//                end
-//                if(!(i%500))
-//                    $display("programming synapses... (i=%0d/8192)", i);
-//            end
-//            $display("----- Ending programmation of all synapses in the SNN through UART.");
-//        end else
-//            $display("----- Skipping programmation of all synapses in the SNN through UART.");
+        if (`PROGRAM_ALL_SYNAPSES) begin
+            uart_send_configuration (.addr(2'd0), .data(1'b1), .odin_rx(RX)); // CFG_GATE_ACTIVITY
+            synapse_pattern = {4'd15,4'd7,4'd12,4'd13,4'd10,4'd5,4'd1,4'd2};
+            $display("----- Starting programmation of all synapses in the SNN through UART.");
+            for (i=0; i<8192; i=i+1) begin
+                for (j=0; j<4; j=j+1) begin
+                    syn_data        = synapse_pattern >> (j<<3);
+                    addr_temp[15:13] = j;    // Each single byte in a 32-bit word
+                    addr_temp[12:0 ] = i;    // Programmed address by address
+                    uart_send_synapse (.byte_addr(addr_temp[14:13]),
+                                       .word_addr(addr_temp[12:0]),
+                                       .mask(8'h00),
+                                       .data(syn_data[7:0]),
+                                       .odin_rx(RX)
+                                       );
+                end
+                if(!(i%500))
+                    $display("programming synapses... (i=%0d/8192)", i);
+            end
+            uart_send_configuration (.addr(2'd0), .data(1'b0), .odin_rx(RX)); // disable CFG_GATE_ACTIVITY
+            $display("----- Ending programmation of all synapses in the SNN through UART.");
+        end else
+            $display("----- Skipping programmation of all synapses in the SNN through UART.");
             
         
-//        /*****************************************************************************************************************************************************************************************************************
-//                                                                                                        READ BACK AND TEST SYNAPSE MEMORY
-//        *****************************************************************************************************************************************************************************************************************/
+        /*****************************************************************************************************************************************************************************************************************
+                                                                                                        READ BACK AND TEST SYNAPSE MEMORY
+        *****************************************************************************************************************************************************************************************************************/
         
-//        if (`VERIFY_ALL_SYNAPSES) begin
-//            $display("----- Starting verification of all synapses in the SNN through SPI.");
-//            for (i=0; i<8192; i=i+1) begin
-//                for (j=0; j<4; j=j+1) begin
-//                    syn_data        = synapse_pattern >> (j<<3);
-//                    addr_temp[15:13] = j;    // Each single byte in a 32-bit word
-//                    addr_temp[12:0 ] = i;    // Programmed address by address
-//                    spi_read (.addr({1'b1,1'b0,2'b10,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
-//                    assert(spi_read_data == {12'b0,syn_data[7:0]}) else $fatal(0, "Byte %d of address %d not written/read correctly.", j, i);
-//                end
-//                if(!(i%500))
-//                    $display("verifying synapses... (i=%0d/8192)", i);
-//            end
-//            $display("----- Ending verification of all synapses in the SNN through SPI, no error found!");
-//        end else
-//            $display("----- Skipping verification of all synapses in the SNN through SPI.");
+        if (`VERIFY_ALL_SYNAPSES) begin
+            $display("----- Starting verification of all synapses in the SNN through SPI.");
+            for (i=0; i<8192; i=i+1) begin
+                assert(top.tinyODIN_inst.synaptic_core_0.synarray_0.SRAM[i] == synapse_pattern) else $fatal(1, "Memory of synapse %d not written/read correctly.", i);
+                
+                if(!(i%500))
+                    $display("verifying synapses... (i=%0d/8192)", i);
+            end
+            $display("----- Ending verification of all synapses in the SNN through SPI, no error found!");
+        end else
+            $display("----- Skipping verification of all synapses in the SNN through SPI.");
  
 
 //        /*****************************************************************************************************************************************************************************************************************
@@ -596,31 +578,6 @@ module WholeOdin();
     /***************************
       SNN INSTANTIATION
 	***************************/
-    
-//    tinyODIN snn_0 (
-//        // Global input     -------------------------------
-//        .CLK(CLK),
-//        .RST(RST),
-        
-//        // SPI slave        -------------------------------
-//        .SCK(SCK),
-//        .MOSI(MOSI),
-//        .MISO(MISO),
-        
-//        // Input 10-bit AER -------------------------------
-////        .AERIN_ADDR(AERIN_ADDR),
-////        .AERIN_REQ(AERIN_REQ),
-////        .AERIN_ACK(AERIN_ACK),
-
-//        // Output 8-bit AER -------------------------------
-////        .AEROUT_ADDR(AEROUT_ADDR),
-////        .AEROUT_REQ(AEROUT_REQ),
-////        .AEROUT_ACK(AEROUT_ACK),
-
-//        // Debug ------------------------------------------
-//        .SCHED_FULL(SCHED_FULL)
-
-//    );   
 
     fpga_core #(.prescale(1), .max_neurons(`MAX_NEUR)) top (.clk(CLK), .rst(RST), .rxd(RX), .txd(TX));
     
@@ -686,7 +643,7 @@ module WholeOdin();
 
 	endtask
 
-    
+
     /***************************
 	 UART send data
 	***************************/

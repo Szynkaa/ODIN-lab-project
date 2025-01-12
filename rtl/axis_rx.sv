@@ -106,7 +106,7 @@ module axis_rx (
             s_axis_tready <= 1'b0;
         end
         else if (state == CFG_W || state == NEURON_W || state == SYNAPSE_W || state == AERIN_W) begin
-            if (s_axis_tvalid) begin
+            if (s_axis_tvalid & ~s_axis_tready) begin
                 byte_cnt <= byte_cnt + 1;
                 bytes <= {bytes[23:0], s_axis_tdata};
                 s_axis_tready <= 1'b1;
@@ -139,7 +139,7 @@ module axis_rx (
             end
             else if (prev_state == SYNAPSE_W) begin
                 CTRL_PROG_EVENT <= 1'b1;
-                CTRL_SPI_ADDR <= {2'b0, bytes[29:16]};
+                CTRL_SPI_ADDR <= {2'b0, bytes[30:16]};
                 CTRL_OP_CODE <= 2'b10;
                 CTRL_PROG_DATA <= bytes[15:0];
             end
