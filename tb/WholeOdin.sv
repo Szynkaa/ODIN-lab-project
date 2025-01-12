@@ -696,7 +696,7 @@ module WholeOdin();
 	   input logic        data,
 	   ref   logic        odin_rx
     );
-        reg [7:0] payload = {4'b0000, addr, 1'b0, data};
+        reg [7:0] payload = {4'b0001, addr, 1'b0, data};
         send_uart_data(.data(payload), .programmer_tx(odin_rx));
     endtask
     
@@ -707,7 +707,7 @@ module WholeOdin();
 	   input logic [7:0]  data,
 	   ref   logic        odin_rx
     );
-        reg [7:0] payload = {5'b01000, byte_addr};
+        reg [7:0] payload = {6'b010000, byte_addr};
         send_uart_data(.data(payload), .programmer_tx(odin_rx));
         send_uart_data(.data(word_addr), .programmer_tx(odin_rx));
         send_uart_data(.data(mask), .programmer_tx(odin_rx));
@@ -716,12 +716,12 @@ module WholeOdin();
     
     task automatic uart_send_synapse (
 	   input logic [1:0]  byte_addr,
-	   input logic [11:0]  word_addr,
+	   input logic [12:0]  word_addr,
 	   input logic [7:0]  mask,
 	   input logic [7:0]  data,
 	   ref   logic        odin_rx
     );
-        reg [7:0] payload = {2'b10, byte_addr, word_addr[11:8]};
+        reg [7:0] payload = {2'b1, byte_addr, word_addr[12:8]};
         send_uart_data(.data(payload), .programmer_tx(odin_rx));
         send_uart_data(.data(word_addr[7:0]), .programmer_tx(odin_rx));
         send_uart_data(.data(mask), .programmer_tx(odin_rx));

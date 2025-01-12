@@ -26,21 +26,21 @@ module axis_rx (
 );
 
     /*
+    synapse write
+    byte 3                             | byte 2         | byte 1    | byte 0
+    1, byte_addr<1:0>, word_addr<12:8> | word_addr<7:0> | mask<7:0> | date<7:0>
+    
+    neuron write
+    byte 3                   | byte 2         | byte 1    | byte 0
+    0100, --, byte_addr<1:0> | word_addr<7:0> | mask<7:0> | date<7:0>
+    
+    AER in
+    byte 1             | byte 0
+    0010, --, AER<9:8> | AER<7:0>
+    
     configuration write
     byte 0
-    00, --, cfg_addr<1:0>, -, cfg_data<0>
-
-    neuron write
-    byte 3                  | byte 2         | byte 1    | byte 0
-    01 ----, byte_addr<1:0> | word_addr<7:0> | mask<7:0> | date<7:0>
-
-    synapse write
-    byte 3                              | byte 2         | byte 1    | byte 0
-    10, byte_addr<1:0>, word_addr<11:8> | word_addr<7:0> | mask<7:0> | date<7:0>
-
-    AER in
-    byte 1            | byte 0
-    11 ----, AER<9:8> | AER<7:0>
+    0001, cfg_addr<1:0>, -, cfg_data<0>
     */
 
     typedef enum {
@@ -72,10 +72,10 @@ module axis_rx (
     always @* begin
         case (state)
             IDLE        :   if      (s_axis_tvalid)
-                                if      (s_axis_tdata[7:6] == 2'b00)    next_state = CFG_W;
-                                else if (s_axis_tdata[7:6] == 2'b01)    next_state = NEURON_W;
-                                else if (s_axis_tdata[7:6] == 2'b10)    next_state = SYNAPSE_W;
-                                else if (s_axis_tdata[7:6] == 2'b11)    next_state = AERIN_W;
+                                if      (s_axis_tdata[7:4] == 4'b0001)  next_state = CFG_W;
+                                else if (s_axis_tdata[7:4] == 4'b0100)  next_state = NEURON_W;
+                                else if (s_axis_tdata[7:7] == 1'b1)     next_state = SYNAPSE_W;
+                                else if (s_axis_tdata[7:4] == 4'b0010)  next_state = AERIN_W;
                                 else                                    next_state = IDLE;
                             else                                        next_state = IDLE;
 

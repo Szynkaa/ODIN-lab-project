@@ -26,7 +26,7 @@ module test_configurationWithUART();
     reg rst;
     reg stream;
     
-    reg [7:0] data = 8'b00100001;
+    reg [7:0] data = 8'b00010001;
     localparam addr_gate = 2'd0;
     localparam addr_loop = 2'd1;
     localparam addr_aer  = 2'd2;
