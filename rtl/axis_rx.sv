@@ -164,8 +164,12 @@ module axis_rx (
             AERIN_REQ <= 1'b0;
         end
         else if (state == AERIN_WAIT) begin
-            AERIN_ADDR <= bytes[9:0];
-            AERIN_REQ <= 1'b0;
+            if (AERIN_ACK)
+                AERIN_REQ <= 1'b0;
+            else begin
+                AERIN_ADDR <= bytes[9:0];
+                AERIN_REQ <= 1'b1;
+            end
         end
     end
 

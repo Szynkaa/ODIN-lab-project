@@ -28,7 +28,7 @@
 //------------------------------------------------------------------------------
 
 `define CLK_HALF_PERIOD             2
-`define SCK_HALF_PERIOD            25
+`define pc                          1
 
 `define N 256 
 `define M 8
@@ -44,7 +44,7 @@
 `define OPEN_LOOP          1'b1
 `define AER_SRC_CTRL_nNEUR 1'b0
 `define MAX_NEUR         8'd200
-`define UART_BIT_INTERVAL `CLK_HALF_PERIOD*16
+`define UART_BIT_INTERVAL `CLK_HALF_PERIOD*`pc*16
 
 
 
@@ -54,11 +54,11 @@ module WholeOdin();
     logic            RST;
     
     logic            UART_config_rdy;
-    logic            SPI_param_checked;
+    logic            UART_param_checked;
     logic            SNN_initialized_rdy;
     
     logic            RX, TX;
-    wire             SCHED_FULL;
+    logic [  `M-1:0] AEROUT_ADDR;
     
     logic [    31:0] synapse_pattern , syn_data;
     logic [    31:0] neuron_pattern  , neur_data;
@@ -77,7 +77,6 @@ module WholeOdin();
 
     logic signed [11:0] vcore[255:0];
     integer time_window_check;
-    logic auto_ack_verbose;
 
     integer i,j,k,n;
     integer phase;
@@ -92,9 +91,8 @@ module WholeOdin();
         TX = 1'b1;
         
         UART_config_rdy = 1'b0;
-        SPI_param_checked = 1'b0;
+        UART_param_checked = 1'b0;
         SNN_initialized_rdy = 1'b0;
-        auto_ack_verbose = 1'b0;
     end
     
 
@@ -124,7 +122,7 @@ module WholeOdin();
         RST = 1'b0;
         wait_ns(100);
         UART_config_rdy = 1'b1;
-        while (~SPI_param_checked) wait_ns(1);
+        while (~UART_param_checked) wait_ns(1);
 		wait_ns(100);
         RST = 1'b1;
         wait_ns(100);
@@ -167,7 +165,7 @@ module WholeOdin();
         
         $display("----- Ending verification of programmed SNN parameters, no error found!");
         
-        SPI_param_checked = 1'b1;
+        UART_param_checked = 1'b1;
         
         while (~SNN_initialized_rdy) wait_ns(1);
         
@@ -178,7 +176,7 @@ module WholeOdin();
         *****************************************************************************************************************************************************************************************************************/
 
         if (`PROGRAM_NEURON_MEMORY) begin
-                $display("----- Starting programmation of neuron memory in the SNN through UART.");
+            $display("----- Starting programmation of neuron memory in the SNN through UART.");
             uart_send_configuration (.addr(2'd0), .data(1'b1), .odin_rx(RX)); // CFG_GATE_ACTIVITY
             neuron_pattern = {2{8'b01010101,8'b10101010}};
             for (i=0; i<`N; i=i+1) begin
@@ -203,20 +201,20 @@ module WholeOdin();
             
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                        READ BACK AND TEST NEURON MEMORY
+                                                                                                        TEST NEURON MEMORY
         *****************************************************************************************************************************************************************************************************************/
         
-        if (`VERIFY_NEURON_MEMORY) begin
-            $display("----- Starting verification of neuron memory in the SNN through SPI.");
+        if (`VERIFY_NEURON_MEMORY && `PROGRAM_NEURON_MEMORY) begin
+            $display("----- Starting verification of neuron memory in the SNN.");
             for (i=0; i<`N; i=i+1) begin
                 assert(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[i] == neuron_pattern) else $fatal(1, "Memory of neuron %d not written/read correctly.", i);
 
                 if(!(i%10))
                     $display("verifying neurons... (i=%0d/256)", i);
             end
-            $display("----- Ending verification of neuron memory in the SNN through SPI, no error found!");
+            $display("----- Ending verification of neuron memory in the SNN, no error found!");
         end else
-            $display("----- Skipping verification of neuron memory in the SNN through SPI.");
+            $display("----- Skipping verification of neuron memory in the SNN.");
         
         
         /*****************************************************************************************************************************************************************************************************************
@@ -249,326 +247,330 @@ module WholeOdin();
             
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                        READ BACK AND TEST SYNAPSE MEMORY
+                                                                                                        TEST SYNAPSE MEMORY
         *****************************************************************************************************************************************************************************************************************/
         
         if (`VERIFY_ALL_SYNAPSES) begin
-            $display("----- Starting verification of all synapses in the SNN through SPI.");
+            $display("----- Starting verification of all synapses in the SNN.");
             for (i=0; i<8192; i=i+1) begin
                 assert(top.tinyODIN_inst.synaptic_core_0.synarray_0.SRAM[i] == synapse_pattern) else $fatal(1, "Memory of synapse %d not written/read correctly.", i);
                 
                 if(!(i%500))
                     $display("verifying synapses... (i=%0d/8192)", i);
             end
-            $display("----- Ending verification of all synapses in the SNN through SPI, no error found!");
+            $display("----- Ending verification of all synapses in the SNN, no error found!");
         end else
-            $display("----- Skipping verification of all synapses in the SNN through SPI.");
+            $display("----- Skipping verification of all synapses in the SNN.");
  
 
-//        /*****************************************************************************************************************************************************************************************************************
-//                                                                                                     SYSTEM-LEVEL CHECKING
-//        *****************************************************************************************************************************************************************************************************************/
+        /*****************************************************************************************************************************************************************************************************************
+                                                                                                     SYSTEM-LEVEL CHECKING
+        *****************************************************************************************************************************************************************************************************************/
            
-//        if (`DO_FULL_CHECK) begin
-        
-//            fork
-//                auto_ack(.req(AEROUT_REQ), .ack(AEROUT_ACK), .addr(AEROUT_ADDR), .neur(aer_neur_spk), .verbose(auto_ack_verbose));
-//            join_none
-        
-//            // Initializing all neurons to zero
-//            $display("----- Disabling neurons 0 to 255.");   
-//            for (i=0; i<`N; i=i+1) begin
-//                addr_temp[15:8] = 3;   // Programming only last byte for disabling a neuron
-//                addr_temp[7:0]  = i;   // Doing so for all neurons
+        if (`DO_FULL_CHECK) begin
+            // Initializing all neurons to zero
+            $display("----- Disabling neurons 0 to 255.");  
+            uart_send_configuration(.addr(2'd0), .data(1'd1), .odin_rx(RX)); // CFG_GATE_ACTIVITY (1) 
+            for (i=0; i<`N; i=i+1) begin
+                addr_temp[15:8] = 3;   // Programming only last byte for disabling a neuron
+                addr_temp[7:0]  = i;   // Doing so for all neurons
                 
-//                uart_send_neuron(.byte_addr(addr_temp[10:8]),
-//                                 .word_addr(addr_temp[7:0]),
-//                                 .mask(8'h7F),
-//                                 .data(8'h80),
-//                                 .odin_rx(RX)
-//                                 );
-//            end
-//            $display("----- Programming neurons done...");
-        
+                uart_send_neuron(.byte_addr(addr_temp[9:8]),
+                                 .word_addr(addr_temp[7:0]),
+                                 .mask(8'h7F),
+                                 .data(8'h80),
+                                 .odin_rx(RX)
+                                 );
+            end
+            uart_send_configuration(.addr(2'd0), .data(1'd0), .odin_rx(RX)); // disable CFG_GATE_ACTIVITY (0)
+            $display("----- Programming neurons done...");
+            
+            
+            /*****************************************************************************************************************************************************************************************************************
+                                                                                                            TEST NEURON MEMORY
+            *****************************************************************************************************************************************************************************************************************/
+            
+            if (`VERIFY_NEURON_MEMORY) begin
+                $display("----- Starting verification of neuron memory in the SNN.");
+                for (i=0; i<`N; i=i+1) begin
+                    assert(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[i][31] == 1'b1) else $fatal(1, "Neuron %d not disabled correctly.", i);
+                end
+                $display("----- Ending verification of neuron memory in the SNN, no error found!");
+            end else
+                $display("----- Skipping verification of neuron memory in the SNN.");
 
-//            for (phase=0; phase<2; phase=phase+1) begin
+            for (phase=0; phase<2; phase=phase+1) begin
 
 
-//	            $display("--- Starting phase %d.", phase);
+	            $display("--- Starting phase %d.", phase);
 
-//	            //Disable network operation
-//	            uart_send_configuration (.addr(2'd0), .data(1'd1), .odin_rx(RX)); // CFG_GATE_ACTIVITY (1)
-//                uart_send_configuration (.addr(2'd1), .data(1'd1), .odin_rx(RX)); // CFG_OPEN_LOOP (1)
+	            //Disable network operation
+	            uart_send_configuration(.addr(2'd0), .data(1'd1), .odin_rx(RX)); // CFG_GATE_ACTIVITY (1)
+                uart_send_configuration (.addr(2'd1), .data(1'd1), .odin_rx(RX)); // CFG_OPEN_LOOP (1)
 
-//	            $display("----- Starting programming of neurons 0,1,3,13,27,38,53,62,100,119,140,169,194,248,250,255.");
+	            $display("----- Starting programming of neurons 0,1,3,13,27,38,53,62,100,119,140,169,194,248,250,255.");
 	            
-//	            target_neurons = '{255,250,248,194,169,140,119,100,62,53,38,27,13,3,1,0};
-//	            input_neurons  = '{255,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0};
+	            target_neurons = '{255,250,248,194,169,140,119,100,62,53,38,27,13,3,1,0};
+	            input_neurons  = '{255,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0};
 	            
-//	            // Programming neurons
-//	            for (i=0; i<16; i=i+1) begin
-//	                shift_amt      = 32'b0;
+	            // Programming neurons
+	            for (i=0; i<16; i=i+1) begin
+	                shift_amt      = 32'b0;
 	                
-//	                case (target_neurons[i]) 
-//	                    0 : begin
-//	                        param_leak_str  = (!phase) ?           7'd0     :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    1 : begin
-//	                        param_leak_str  = (!phase) ?           7'd1     :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd3);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    3 : begin
-//	                        param_leak_str  = (!phase) ?           7'd10    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd10);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    13 : begin
-//	                        param_leak_str  = (!phase) ?           7'd30    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd100);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    27 : begin
-//	                        param_leak_str  = (!phase) ?           7'd40    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd200);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    38 : begin
-//	                        param_leak_str  = (!phase) ?           7'd50    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd300);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    53 : begin
-//	                        param_leak_str  = (!phase) ?           7'd60    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd400);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    62 : begin
-//	                        param_leak_str  = (!phase) ?           7'd70    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd500);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    100 : begin
-//	                        param_leak_str  = (!phase) ?           7'd80    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd600);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    119 : begin
-//	                        param_leak_str  = (!phase) ?           7'd90    :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd700);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    140 : begin
-//	                        param_leak_str  = (!phase) ?           7'd100   :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd800);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    169 : begin
-//	                        param_leak_str  = (!phase) ?           7'd110   :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd900);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    194 : begin
-//	                        param_leak_str  = (!phase) ?           7'd127   :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd2022);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    248 : begin
-//	                        param_leak_str  = (!phase) ?           7'd120   :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1000);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    250 : begin
-//	                        param_leak_str  = (!phase) ?           7'd130   :           7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1500);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    255 : begin
-//	                        param_leak_str  = (!phase) ?           7'd140  :            7'd10;
-//	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd2000);
-//	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
-//	                    end
-//	                    default : $fatal("Error in neuron configuration"); 
-//	                endcase 
+	                case (target_neurons[i]) 
+	                    0 : begin
+	                        param_leak_str  = (!phase) ?           7'd0     :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    1 : begin
+	                        param_leak_str  = (!phase) ?           7'd1     :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd3);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    3 : begin
+	                        param_leak_str  = (!phase) ?           7'd10    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd10);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    13 : begin
+	                        param_leak_str  = (!phase) ?           7'd30    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd100);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    27 : begin
+	                        param_leak_str  = (!phase) ?           7'd40    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd200);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    38 : begin
+	                        param_leak_str  = (!phase) ?           7'd50    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd300);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    53 : begin
+	                        param_leak_str  = (!phase) ?           7'd60    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd400);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    62 : begin
+	                        param_leak_str  = (!phase) ?           7'd70    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd500);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    100 : begin
+	                        param_leak_str  = (!phase) ?           7'd80    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd600);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    119 : begin
+	                        param_leak_str  = (!phase) ?           7'd90    :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd700);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    140 : begin
+	                        param_leak_str  = (!phase) ?           7'd100   :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd800);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    169 : begin
+	                        param_leak_str  = (!phase) ?           7'd110   :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd900);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    194 : begin
+	                        param_leak_str  = (!phase) ?           7'd127   :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd2022);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    248 : begin
+	                        param_leak_str  = (!phase) ?           7'd120   :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1000);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    250 : begin
+	                        param_leak_str  = (!phase) ?           7'd130   :           7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd1500);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    255 : begin
+	                        param_leak_str  = (!phase) ?           7'd140  :            7'd10;
+	                        param_thr       = (!phase) ? $signed( 12'd2047) : $signed( 12'd2000);
+	                        mem_init        = (!phase) ? $signed( 12'd2046) : $signed( 12'd0);
+	                    end
+	                    default : $fatal("Error in neuron configuration"); 
+	                endcase 
 	                
-//	                neuron_pattern = {1'b0, param_leak_str, param_thr, mem_init};
+	                neuron_pattern = {1'b0, param_leak_str, param_thr, mem_init};
 	                                         
-//	                for (j=0; j<4; j=j+1) begin
-//	                    neur_data       = neuron_pattern >> shift_amt;
-//	                    addr_temp[15:8] = j;
-//	                    addr_temp[7:0]  = target_neurons[i];
+	                for (j=0; j<4; j=j+1) begin
+	                    neur_data       = neuron_pattern >> shift_amt;
+	                    addr_temp[15:8] = j;
+	                    addr_temp[7:0]  = target_neurons[i];
 	                    
-//                        uart_send_neuron(.byte_addr(addr_temp[10:8]),
-//                                         .word_addr(addr_temp[7:0]),
-//                                         .mask(8'h00),
-//                                         .data(neur_data[7:0]),
-//                                         .odin_rx(RX)
-//                                         );
-//	                    shift_amt       = shift_amt + 32'd8;
-//	                end          
+                        uart_send_neuron(.byte_addr(addr_temp[9:8]),
+                                         .word_addr(addr_temp[7:0]),
+                                         .mask(8'h00),
+                                         .data(neur_data[7:0]),
+                                         .odin_rx(RX)
+                                         );
+	                    shift_amt       = shift_amt + 32'd8;
+	                end          
 
-//			        for (j=0; j<16; j=j+1) begin
-//			            addr_temp[ 12:5] = input_neurons[j][7:0];
-//			            addr_temp[  4:0] = target_neurons[i][7:3];
-//			            addr_temp[14:13] = target_neurons[i][2:1];
-////			            spi_send (.addr({1'b0,1'b1,2'b10,addr_temp[15:0]}), .data({4'b0,8'h00,{input_neurons[j][3:0],input_neurons[j][3:0]}}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));
-//			            uart_send_synapse (.byte_addr(addr_temp[14:13]),
-//                                           .word_addr(addr_temp[11:0]),
-//                                           .mask(8'h00),
-//                                           .data({input_neurons[j][3:0],input_neurons[j][3:0]}),
-//                                           .odin_rx(RX)
-//                                           ); // Synapse value = pre-synaptic neuron index 4 LSBs
-//			        end
+			        for (j=0; j<16; j=j+1) begin
+			            addr_temp[ 12:5] = input_neurons[j][7:0];
+			            addr_temp[  4:0] = target_neurons[i][7:3];
+			            addr_temp[14:13] = target_neurons[i][2:1];
+			            uart_send_synapse (.byte_addr(addr_temp[14:13]),
+                                           .word_addr(addr_temp[12:0]),
+                                           .mask(8'h00),
+                                           .data({input_neurons[j][3:0],input_neurons[j][3:0]}),
+                                           .odin_rx(RX)
+                                           ); // Synapse value = pre-synaptic neuron index 4 LSBs
+			        end
 
-//                end
+                end
 
 
-//                if (`DO_OPEN_LOOP) begin
-
-//    	            //Re-enable network operation (SPI_OPEN_LOOP stays at 1)
-//    	            uart_send_configuration (.addr(2'd0), .data(1'b0), .odin_rx(RX)); // CFG_GATE_ACTIVITY (0)
+                if (`DO_OPEN_LOOP) begin
+    	            //Re-enable network operation (CFG_OPEN_LOOP stays at 1)
+    	            uart_send_configuration(.addr(2'd0), .data(1'b0), .odin_rx(RX)); // CFG_GATE_ACTIVITY (0)
     	            
-//    	            $display("----- Starting stimulation pattern.");
+    	            $display("----- Starting stimulation pattern.");
 
-//                    for (n=0; n<256; n++)
-//                        vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                    for (n=0; n<256; n++)
+                        vcore[n] = $signed(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[n][11:0]);
 
-//                    if (!phase) begin
+                    if (!phase) begin
 
-//                    	for (j=0; j<2050; j=j+1) begin
-//                    		aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Time reference event (global)
-//                            wait_ns(2000);
+                    	for (j=0; j<2050; j=j+1) begin
+                    	    uart_send_aer(.address({1'b0,1'b1,8'hFF}), .odin_rx(RX));
+                            wait_ns(2000);
 
-//                            for (n=0; n<256; n++)
-//                                vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
-//                        end
+                            for (n=0; n<256; n++)
+                                vcore[n] = $signed(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                        end
 
-//                    	wait_ns(10000);
+                    	wait_ns(10000);
 
-//                        /*
-//                         * Here, all neurons but number 0 should be at a membrane potential of 0
-//                         */
-//                        for (j=0; j<16; j=j+1)
-//                            assert ($signed(vcore[target_neurons[j]]) == (((target_neurons[j] > 0) && (target_neurons[j] < `MAX_NEUR)) ? $signed(12'd0) : $signed(12'd2046))) else $fatal(0, "Issue in open-loop experiments: membrane potential of neuron %d not correct after leakage",target_neurons[j]);
+                        /*
+                         * Here, all neurons but number 0 should be at a membrane potential of 0
+                         */
+                        for (j=0; j<16; j=j+1)
+                            assert ($signed(vcore[target_neurons[j]]) == (((target_neurons[j] > 0) && (target_neurons[j] < `MAX_NEUR)) ? $signed(12'd0) : $signed(12'd2046))) else $fatal(1, "Issue in open-loop experiments: membrane potential of neuron %d not correct after leakage",target_neurons[j]);
 
 
-//                    end else begin
+                    end else begin
 
-//                    	for (j=0; j<16; j=j+1)
-//    	                	for (k=0; k<10; k=k+1) begin
+                    	for (j=0; j<16; j=j+1)
+    	                	for (k=0; k<10; k=k+1) begin
+    	                	    uart_send_aer(.address({1'b0,1'b0,input_neurons[j][7:0]}), .odin_rx(RX));
 //    	                		aer_send (.addr_in({1'b0,1'b0,input_neurons[j][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Neuron events
-//                                wait_ns(2000);
+                                wait_ns(2000);
                     
-//                                for (n=0; n<256; n++)
-//                                    vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
-//                            end
+                                for (n=0; n<256; n++)
+                                    vcore[n] = $signed(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                            end
 
-//                    	wait_ns(10000);
+                    	wait_ns(10000);
 
-//                		/*
-//                		 * Here, neurons that did not fire (all except 0,1,3,13,27) should be at mem pot -80
-//                		 */
-//                        for (j=0; j<16; j=j+1)
-//                            if ((target_neurons[j] > 27) && (target_neurons[j] < `MAX_NEUR))
-//                                assert ($signed(vcore[target_neurons[j]]) == $signed(-12'd80)) else $fatal(0, "Issue in open-loop experiments: membrane potential of neuron %d not correct after stimulation",target_neurons[j]);
-
-
-//                        for (j=0; j<100; j=j+1) begin
-//                            aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Time reference event (global)
-//                            wait_ns(2000);
-
-//                            for (n=0; n<256; n++)
-//                                vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
-//                        end
-
-//                        wait_ns(10000);
-
-//                        /*
-//                         * Here, all mem pots should be back to 0
-//                         */
-//                        for (j=0; j<16; j=j+1)
-//                            assert ($signed(vcore[target_neurons[j]]) == $signed(12'd0)) else $fatal(0, "Issue in open-loop experiments: membrane potential of neuron %d not correct after leakage",target_neurons[j]);
-
-//                        fork
-//                            // Thread 1
-//                        	for (k=0; k<300; k=k+1) begin
-//                        		aer_send (.addr_in({1'b0,1'b0,input_neurons[7][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Neuron events
-//                                wait_ns(2000);
-
-//                                for (n=0; n<256; n++)
-//                                    vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
-//                            end
-
-//                            //Thread 2
-//                             /*
-//                             * Here, neuron 194 (with the highest membrane potential among enabled neurons) should fire. Neuron 248, 250 or 255 should be disabled.
-//                             */
-//                            while (aer_neur_spk != 8'd194) begin
-//                                assert ((aer_neur_spk != 8'd248) && (aer_neur_spk != 8'd250) && (aer_neur_spk != 8'd255)) else $fatal(0, "Issue in open-loop experiments: neurons 248, 250 or 255 should be disabled.");
-//                                wait_ns(1);
-//                            end
-//                        join
-
-//                    	wait_ns(100000);
-
-//                    end   
-
-//                end 
+                		/*
+                		 * Here, neurons that did not fire (all except 0,1,3,13,27) should be at mem pot -80
+                		 */
+                        for (j=0; j<16; j=j+1)
+                            if ((target_neurons[j] > 27) && (target_neurons[j] < `MAX_NEUR))
+                                assert ($signed(vcore[target_neurons[j]]) == $signed(-12'd80)) else $fatal(1, "Issue in open-loop experiments: membrane potential of neuron %d not correct after stimulation",target_neurons[j]);
 
 
-//                if (`DO_CLOSED_LOOP) begin
+                        for (j=0; j<100; j=j+1) begin
+                            uart_send_aer(.address({1'b0,1'b1,8'hFF}), .odin_rx(RX));
+                            wait_ns(2000);
 
-//                    //Re-enable network operation
-//                    uart_send_configuration (.addr(2'd0), .data(1'b0), .odin_rx(RX)); // CFG_GATE_ACTIVITY (0)
-//                    uart_send_configuration (.addr(2'd1), .data(1'b0), .odin_rx(RX)); // CFG_OPEN_LOOP (0)
+                            for (n=0; n<256; n++)
+                                vcore[n] = $signed(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                        end
+
+                        wait_ns(10000);
+
+                        /*
+                         * Here, all mem pots should be back to 0
+                         */
+                        for (j=0; j<16; j=j+1)
+                            assert ($signed(vcore[target_neurons[j]]) == $signed(12'd0)) else $fatal(1, "Issue in open-loop experiments: membrane potential of neuron %d not correct after leakage",target_neurons[j]);
+
+                        fork
+                            // Thread 1
+                        	for (k=0; k<300; k=k+1) begin
+                                uart_send_aer(.address({1'b0,1'b0,input_neurons[7][7:0]}), .odin_rx(RX));
+                                wait_ns(2000);
+
+                                for (n=0; n<256; n++)
+                                    vcore[n] = $signed(top.tinyODIN_inst.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                            end
+
+                            //Thread 2
+                             /*
+                             * Here, neuron 194 (with the highest membrane potential among enabled neurons) should fire. Neuron 248, 250 or 255 should be disabled.
+                             */
+                            while (aer_neur_spk != 8'd194) begin
+                                assert ((aer_neur_spk != 8'd248) && (aer_neur_spk != 8'd250) && (aer_neur_spk != 8'd255)) else $fatal(1, "Issue in open-loop experiments: neurons 248, 250 or 255 should be disabled.");
+                                wait_ns(1);
+                            end
+                        join
+
+                    	wait_ns(100000);
+
+                    end   
+
+                end 
+
+
+                if (`DO_CLOSED_LOOP) begin
+
+                    //Re-enable network operation
+                    uart_send_configuration (.addr(2'd0), .data(1'b0), .odin_rx(RX)); // CFG_GATE_ACTIVITY (0)
+                    uart_send_configuration (.addr(2'd1), .data(1'b0), .odin_rx(RX)); // CFG_OPEN_LOOP (0)
                     
-//                    $display("----- Starting stimulation pattern.");
+                    $display("----- Starting stimulation pattern.");
                     
 
-//                    if (phase) begin
+                    if (phase) begin
 
-//                        //Start monitoring output spikes in the console
-//                        auto_ack_verbose = 1'b1;
+                        //Start monitoring output spikes in the console
+                        uart_send_aer(.address({1'b1,1'b0,{4'h5,4'd3}}), .odin_rx(RX)); //Virtual value-5 event to neuron 3
+                        uart_send_aer(.address({1'b1,1'b0,{4'h5,4'd3}}), .odin_rx(RX)); //Virtual value-5 event to neuron 3
+                        /*
+                         * Here, the correct output firing sequence is 3,0,1,0.
+                         */
+                        uart_get_aer(.data(AEROUT_ADDR), .rx(TX));
+                        assert (AEROUT_ADDR == 8'd3) else $fatal(1, "Issue in closed-loop experiments: first spike of the output sequence is not correct, received %d", AEROUT_ADDR);
+                        uart_get_aer(.data(AEROUT_ADDR), .rx(TX));
+                        assert (AEROUT_ADDR == 8'd0) else $fatal(1, "Issue in closed-loop experiments: second spike of the output sequence is not correct, received %d", AEROUT_ADDR);
+                        uart_get_aer(.data(AEROUT_ADDR), .rx(TX));
+                        assert (AEROUT_ADDR == 8'd1) else $fatal(1, "Issue in closed-loop experiments: third spike of the output sequence is not correct, received %d", AEROUT_ADDR);
+                        uart_get_aer(.data(AEROUT_ADDR), .rx(TX));
+                        assert (AEROUT_ADDR == 8'd0) else $fatal(1, "Issue in closed-loop experiments: fourth spike of the output sequence is not correct, received %d", AEROUT_ADDR);
+                        time_window_check = 0;
+                        while (time_window_check < 10000) begin
+                            assert (!top.tinyODIN_inst.AEROUT_REQ) else $fatal(1, "There should not be more than 4 output spikes in the closed-loop experiments, received %d", AEROUT_ADDR);
+                            wait_ns(1);
+                            time_window_check += 1;
+                        end
+                    end
 
-//                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
-//                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
-//                        /*
-//                         * Here, the correct output firing sequence is 3,0,1,0.
-//                         */
-//                        while (!AEROUT_REQ) wait_ns(1);
-//                        assert (AEROUT_ADDR == 8'd3) else $fatal(0, "Issue in closed-loop experiments: first spike of the output sequence is not correct, received %d", AEROUT_ADDR);
-//                        while ( AEROUT_REQ) wait_ns(1);
-//                        while (!AEROUT_REQ) wait_ns(1);
-//                        assert (AEROUT_ADDR == 8'd0) else $fatal(0, "Issue in closed-loop experiments: second spike of the output sequence is not correct, received %d", AEROUT_ADDR);
-//                        while ( AEROUT_REQ) wait_ns(1);
-//                        while (!AEROUT_REQ) wait_ns(1);
-//                        assert (AEROUT_ADDR == 8'd1) else $fatal(0, "Issue in closed-loop experiments: third spike of the output sequence is not correct, received %d", AEROUT_ADDR);
-//                        while ( AEROUT_REQ) wait_ns(1);
-//                        while (!AEROUT_REQ) wait_ns(1);
-//                        assert (AEROUT_ADDR == 8'd0) else $fatal(0, "Issue in closed-loop experiments: fourth spike of the output sequence is not correct, received %d", AEROUT_ADDR);
-//                        while ( AEROUT_REQ) wait_ns(1);
-//                        time_window_check = 0;
-//                        while (time_window_check < 10000) begin
-//                            assert (!AEROUT_REQ) else $fatal(0, "There should not be more than 4 output spikes in the closed-loop experiments, received %d", AEROUT_ADDR);
-//                            wait_ns(1);
-//                            time_window_check += 1;
-//                        end
-//                    end
+                end
 
-//                end
+            end
 
-//            end
+            $display("----- No error found -- All tests passed! :-)"); 
 
-//            $display("----- No error found -- All tests passed! :-)"); 
-
-//        end else
-//            $display("----- Skipping scheduler checking."); 
+        end else
+            $display("----- Skipping scheduler checking."); 
  
 // ________END_TODO____________
 
  
+
         wait_ns(500);
         $finish;
         
@@ -579,7 +581,7 @@ module WholeOdin();
       SNN INSTANTIATION
 	***************************/
 
-    fpga_core #(.prescale(1), .max_neurons(`MAX_NEUR)) top (.clk(CLK), .rst(RST), .rxd(RX), .txd(TX));
+    fpga_core #(.prescale(`pc), .max_neurons(`MAX_NEUR)) top (.clk(CLK), .rst(RST), .rxd(RX), .txd(TX));
     
     /***********************************************************************
 						    TASK IMPLEMENTATIONS
@@ -615,33 +617,6 @@ module WholeOdin();
         wait_ns(5);
         req = 1'b0;
 	endtask
-    
-    
-    /***************************
-	 AER automatic acknowledge
-	***************************/
-
-    task automatic auto_ack (
-        ref    logic       req,
-        ref    logic       ack,
-        ref    logic [7:0] addr,
-        ref    logic [7:0] neur,
-        ref    logic       verbose
-    );
-    
-        forever begin
-            while (~req) wait_ns(1);
-            wait_ns(100);
-            neur = addr;
-            if (verbose)
-                $display("----- NEURON OUTPUT SPIKE (FROM AER): Event from neuron %d", neur);
-            ack = 1'b1;
-            while (req) wait_ns(1);
-            wait_ns(100);
-            ack = 1'b0;
-        end
-
-	endtask
 
 
     /***************************
@@ -664,7 +639,7 @@ module WholeOdin();
 	   input logic [7:0]  data,
 	   ref   logic        odin_rx
     );
-        reg [7:0] payload = {6'b010000, byte_addr};
+        reg [7:0] payload = {4'b0100, 2'd0, byte_addr};
         send_uart_data(.data(payload), .programmer_tx(odin_rx));
         send_uart_data(.data(word_addr), .programmer_tx(odin_rx));
         send_uart_data(.data(mask), .programmer_tx(odin_rx));
@@ -673,16 +648,25 @@ module WholeOdin();
     
     task automatic uart_send_synapse (
 	   input logic [1:0]  byte_addr,
-	   input logic [12:0]  word_addr,
+	   input logic [12:0] word_addr,
 	   input logic [7:0]  mask,
 	   input logic [7:0]  data,
 	   ref   logic        odin_rx
     );
-        reg [7:0] payload = {2'b1, byte_addr, word_addr[12:8]};
+        reg [7:0] payload = {1'b1, byte_addr, word_addr[12:8]};
         send_uart_data(.data(payload), .programmer_tx(odin_rx));
         send_uart_data(.data(word_addr[7:0]), .programmer_tx(odin_rx));
         send_uart_data(.data(mask), .programmer_tx(odin_rx));
         send_uart_data(.data(data), .programmer_tx(odin_rx));
+    endtask
+    
+    task automatic uart_send_aer (
+        input logic [9:0] address,
+        ref   logic       odin_rx
+    );
+        reg [7:0] payload = {4'b0010, 2'd0, address[9:8]};
+        send_uart_data(.data(payload), .programmer_tx(odin_rx));
+        send_uart_data(.data(address[7:0]), .programmer_tx(odin_rx));
     endtask
     
     task automatic send_uart_data (
@@ -702,34 +686,22 @@ module WholeOdin();
     endtask
         
     
-//    /***************************
-//	 SPI read data
-//	***************************/
-
-//    task automatic spi_read (
-//        input  logic [19:0] addr,
-//        output logic [19:0] data,
-//        ref    logic        MISO,
-//        ref    logic        MOSI,
-//        ref    logic        SCK
-//    );
-//        integer i;
+    /***************************
+	 UART read AER
+	***************************/
+    task automatic uart_get_aer (
+        ref   logic    [7:0] data,
+        ref   logic            rx
+    );
+        while (rx) wait_ns(1);
         
-//        for (i=0; i<20; i=i+1) begin
-//            MOSI = addr[19-i];
-//            wait_ns(`SCK_HALF_PERIOD);
-//            SCK  = 1'b1;
-//            wait_ns(`SCK_HALF_PERIOD);
-//            SCK  = 1'b0;
-//        end
-//        for (i=0; i<20; i=i+1) begin
-//            wait_ns(`SCK_HALF_PERIOD);
-//            data = {data[18:0],MISO};
-//            SCK  = 1'b1;
-//            wait_ns(`SCK_HALF_PERIOD);
-//            SCK  = 1'b0;
-//        end
-//	endtask
+        for(integer i=0; i<8; i+=1) begin
+            wait_ns(`UART_BIT_INTERVAL);
+            data[i] = rx;
+        end
+        
+        while (~rx) wait_ns(1);
+    endtask
 
     
 endmodule 

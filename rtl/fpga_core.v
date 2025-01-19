@@ -36,6 +36,7 @@ module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200),
         // UART interface
         .rxd(rxd),
         .txd(txd),
+        .tx_busy(tx_busy),
 
         // Status
         // output wire                   tx_busy,
@@ -115,7 +116,7 @@ module fpga_core #(parameter prescale=85_000_000 / (8 * 115_200),
         // Output 8-bit AER -------------------------------
         .AEROUT_ADDR(tx_axis_tdata),
         .AEROUT_REQ(tx_axis_tvalid),
-        .AEROUT_ACK(tx_axis_tready),
+        .AEROUT_ACK(tx_busy),
 
         // Debug ------------------------------------------
         .SCHED_FULL()
