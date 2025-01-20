@@ -1,12 +1,15 @@
 
-module fpga #(parameter prescale=85_000_000 / (8 * 115_200)) (
+module fpga #(parameter prescale=71_429_000 / (8 * 115_200)) (
     // General
     input  wire clk_100_in,
     input  wire rst,
 
     // UART
     input  wire rxd,
-    output wire txd
+    output wire txd,
+
+    // GPIO
+    output wire [7:0] leds
 );
 
     wire clk_85;
@@ -15,9 +18,9 @@ module fpga #(parameter prescale=85_000_000 / (8 * 115_200)) (
     // 85MHz from 100MHz
     MMCME2_BASE #(
         .CLKIN1_PERIOD(10.0),
-        .DIVCLK_DIVIDE(4),
-        .CLKFBOUT_MULT_F(40.375),
-        .CLKOUT0_DIVIDE_F(11.875)
+        .DIVCLK_DIVIDE(1),
+        .CLKFBOUT_MULT_F(10.000),
+        .CLKOUT0_DIVIDE_F(14.000)
     ) MMCME2_BASE_inst (
         .CLKOUT0(clk_85),
         .CLKFBOUT(mmcm_clk_fb),
@@ -36,7 +39,10 @@ module fpga #(parameter prescale=85_000_000 / (8 * 115_200)) (
 
         // UART
         .rxd(rxd),
-        .txd(txd)
+        .txd(txd),
+
+        // GPIO
+        .leds(leds)
     );
 
 endmodule
