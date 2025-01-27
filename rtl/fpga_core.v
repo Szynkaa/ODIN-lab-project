@@ -21,6 +21,20 @@ module fpga_core #(parameter prescale=1,
     wire       tx_axis_tvalid;
     wire       tx_axis_tready;
 
+    wire tx_busy;
+    wire rx_busy;
+    wire rx_overrun_error;
+
+    reg  rx_overrun_error_hold;
+    always @(posedge clk) begin
+        if (rst)
+            rx_overrun_error_hold <= 0;
+        else if (rx_overrun_error)
+            rx_overrun_error_hold <= 1'b0;
+        else
+            rx_overrun_error_hold <= rx_overrun_error_hold;
+    end
+
     uart uart_inst (
         .clk(clk),
         .rst(rst),
@@ -39,14 +53,12 @@ module fpga_core #(parameter prescale=1,
         .rxd(rxd),
         .txd(txd),
 
-        .tx_busy(tx_busy),
-        .rx_busy(rx_busy),
 
         // Status
-        // output wire                   tx_busy,
-        // output wire                   rx_busy,
-        // output wire                   rx_overrun_error,
-        // output wire                   rx_frame_error,
+        .tx_busy(tx_busy),
+        .rx_busy(rx_busy),
+        .rx_overrun_error(rx_overrun_error),
+        .rx_frame_error(),
 
         // Configuration
         .prescale(prescale)
@@ -69,6 +81,7 @@ module fpga_core #(parameter prescale=1,
 
     assign leds[0] = CFG_GATE_ACTIVITY;
     assign leds[1] = rx_busy;
+    assign leds[2] = rx_overrun_error_hold;
 
     axis_rx rx_handler (
         .clk(clk),
