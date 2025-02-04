@@ -1,5 +1,5 @@
 
-module fpga #(parameter prescale=71_429_000 / (8 * 115_200)) (
+module fpga #(parameter prescale=50_000_000 / (8 * 115_200)) (
     // General
     input  wire clk_100_in,
     input  wire rst,
@@ -20,7 +20,7 @@ module fpga #(parameter prescale=71_429_000 / (8 * 115_200)) (
         .CLKIN1_PERIOD(10.0),
         .DIVCLK_DIVIDE(1),
         .CLKFBOUT_MULT_F(10.000),
-        .CLKOUT0_DIVIDE_F(14.000)
+        .CLKOUT0_DIVIDE_F(20.000)
     ) MMCME2_BASE_inst (
         .CLKOUT0(clk_85),
         .CLKFBOUT(mmcm_clk_fb),

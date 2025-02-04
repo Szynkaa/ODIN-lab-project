@@ -30,7 +30,7 @@ module fpga_core #(parameter prescale=1,
         if (rst)
             rx_overrun_error_hold <= 0;
         else if (rx_overrun_error)
-            rx_overrun_error_hold <= 1'b0;
+            rx_overrun_error_hold <= 1'b1;
         else
             rx_overrun_error_hold <= rx_overrun_error_hold;
     end
@@ -82,6 +82,7 @@ module fpga_core #(parameter prescale=1,
     assign leds[0] = CFG_GATE_ACTIVITY;
     assign leds[1] = rx_busy;
     assign leds[2] = rx_overrun_error_hold;
+    assign leds[7:3] = tx_axis_tdata[4:0];
 
     axis_rx rx_handler (
         .clk(clk),
