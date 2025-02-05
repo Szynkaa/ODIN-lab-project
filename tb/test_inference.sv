@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 `define CLK_HALF_PERIOD     2
-`define prescale            30
+`define prescale            50
 
 `define MAX_NEUR            8'd138
 `define SPIKES_COUNT        1484
@@ -40,6 +40,12 @@ module test_inference ();
     /**
     ***** sim *****
     */
+    logic uart_command_overrun = 1'b0;
+
+    always @(posedge clk) begin
+        if (top.rx_overrun_error)
+            uart_command_overrun = 1'b1;
+    end
 
     integer k;
 
@@ -57,6 +63,10 @@ module test_inference ();
         end
 
         wait_ns(500);
+
+        assert (!uart_command_overrun)
+        else   $fatal("Some input AER through UART where dropped, increase prescale to slow down UART for accurate sim");
+
         $finish;
     end
 
