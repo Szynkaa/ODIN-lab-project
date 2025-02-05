@@ -31,7 +31,8 @@ module fpga #(parameter prescale=50_000_000 / (8 * 115_200)) (
     );
 
     fpga_core #(
-        .prescale(prescale)
+        .prescale(prescale),
+        .max_neurons(137)
     ) fpga_core_inst (
         // General
         .clk(clk_85),

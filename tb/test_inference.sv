@@ -3,7 +3,7 @@
 `define CLK_HALF_PERIOD     2
 `define prescale            50
 
-`define MAX_NEUR            8'd138
+`define MAX_NEUR            8'd137
 `define SPIKES_COUNT        1484
 
 `define UART_BIT_INTERVAL   `CLK_HALF_PERIOD*`prescale*16
