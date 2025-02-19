@@ -29,15 +29,15 @@ module axis_rx (
     synapse write
     byte 3                             | byte 2         | byte 1    | byte 0
     1, byte_addr<1:0>, word_addr<12:8> | word_addr<7:0> | mask<7:0> | date<7:0>
-    
+
     neuron write
     byte 3                   | byte 2         | byte 1    | byte 0
     0100, --, byte_addr<1:0> | word_addr<7:0> | mask<7:0> | date<7:0>
-    
+
     AER in
     byte 1             | byte 0
     0010, --, AER<9:8> | AER<7:0>
-    
+
     configuration write
     byte 0
     0001, cfg_addr<1:0>, -, cfg_data<0>
